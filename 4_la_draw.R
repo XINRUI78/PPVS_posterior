@@ -15,8 +15,8 @@ run_la <- function(i, ndev, nval, n.para, beta0, beta,
   set.seed(i)
   SEED <- as.integer(i)
   
-  data.dev <- generate_ss(ndev, n.para, beta0, beta)
-  data.val <- generate_ss(nval, n.para, beta0, beta)
+  data.dev <- generate_ss(ndev, n.para, beta0, beta, n.true)
+  data.val <- generate_ss(nval, n.para, beta0, beta, n.true)
   
   xval <- data.val[, -1]
   yval <- data.val[, 1]
