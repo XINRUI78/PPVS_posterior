@@ -3,7 +3,7 @@ source("1_parameter.R")
 source("2_data_generation.R")
 source("3_measures.R")
 source("4_select_patients.R")
-source("5_la_draw.R")
+source("5_nor_draw.R")
 
 sim_id <- as.integer(Sys.getenv("SGE_TASK_ID"))
 
