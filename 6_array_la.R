@@ -1,5 +1,5 @@
 source("0_install_packages.R")
-source("1_parameters.R")
+source("1_parameter.R")
 source("2_data_generation.R")
 source("3_measures.R")
 source("4_select_patients.R")
