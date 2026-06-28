@@ -34,8 +34,8 @@ ndev <- 1538
 ndev1 <- round(ndev/2)
 ndev2 <- round(ndev/4)
 ######### obtain the coefficents of beta
-library(MASS)  # For mvrnorm to simulate predictors
-library(pROC)  # For AUC calculation
+library(mvtnorm)
+library(pROC)
 opt_beta <- function(n.para, prev, c, weights) {
   # Generate predictors (X) from multivariate normal distribution
   n = 500000
