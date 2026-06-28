@@ -22,7 +22,7 @@ scenarios <- list(
 
 scenario <- scenarios[[scenario_id]]
 
-out <- run_la(
+out <- run_nor(
   i = sim_id,
   ndev = ndev_current,
   nval = nval,
