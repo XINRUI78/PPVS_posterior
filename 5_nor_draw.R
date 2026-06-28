@@ -7,7 +7,7 @@ library(foreach)
 library(doParallel)
 library(MASS)
 
-run_la <- function(i, ndev, nval, n.para, beta0, beta,
+run_nor <- function(i, ndev, nval, n.para, beta0, beta,
                    n.true = NULL,
                    nterms_max = 30,
                    ns = 2000,
