@@ -15,18 +15,97 @@ measures <- function(yval, p_val) {
   return(c(cal_slope, cal_large, auc, rmspe))
 }
 
-# Performance measures over posterior draws
-# Default: return only mean over draws
-# If return_all = TRUE: return both mean and all draw-level measures
-measures_by_draw <- function(yval,
-                             p_draws,
-                             return_all = FALSE) {
+# ============================================================
+
+orient_draw_matrix <- function(draw_matrix, n_observations) {
   
-  # p_draws: draws × observations
+  draw_matrix <- as.matrix(draw_matrix)
   
-  out <- t(apply(p_draws, 1, function(p) {
-    measures(yval, p)
-  }))
+  if (ncol(draw_matrix) == n_observations) {
+    return(draw_matrix)
+  }
+  
+  if (nrow(draw_matrix) == n_observations) {
+    return(t(draw_matrix))
+  }
+  
+  stop(
+    "Neither dimension of the prediction matrix matches ",
+    "the number of validation observations."
+  )
+}
+
+# ============================================================
+Four summaries of posterior predictions
+# mean_beta:
+#   inverse-logit of mean linear predictor
+# mode_beta:
+#   inverse-logit of modal linear predictor
+# mean_probability:
+#   mean probability across posterior draws
+# mode_probability:
+#   modal probability across posterior draws
+
+summarise_prediction_draws <- function(eta_draws) {
+  
+  eta_draws <- as.matrix(eta_draws)
+  
+  p_draws <- plogis(eta_draws)
+  
+  eta_mean <- colMeans(
+    eta_draws,
+    na.rm = TRUE
+  )
+  
+  eta_mode <- apply(
+    eta_draws,
+    2,
+    estimate_mode
+  )
+  
+  p_mean <- colMeans(
+    p_draws,
+    na.rm = TRUE
+  )
+  
+  p_mode <- apply(
+    p_draws,
+    2,
+    estimate_mode
+  )
+  
+  list(
+    p_draws = p_draws,
+    mean_beta = plogis(eta_mean),
+    mode_beta = plogis(eta_mode),
+    mean_probability = p_mean,
+    mode_probability = p_mode
+  )
+}
+
+
+# ============================================================
+# 6. Measures for every posterior draw
+# ============================================================
+
+measures_by_draw <- function(yval, p_draws) {
+  
+  p_draws <- orient_draw_matrix(
+    draw_matrix = p_draws,
+    n_observations = length(yval)
+  )
+  
+  out <- t(
+    apply(
+      p_draws,
+      1,
+      function(p) {
+        measures(yval, p)
+      }
+    )
+  )
+  
+  out <- as.data.frame(out)
   
   colnames(out) <- c(
     "calibration_slope",
@@ -35,14 +114,8 @@ measures_by_draw <- function(yval,
     "rmspe"
   )
   
-  mean_measures <- colMeans(out, na.rm = TRUE)
+  out$draw <- seq_len(nrow(out))
   
-  if (!return_all) {
-    return(mean_measures)
-  }
-  
-  return(list(
-    mean = mean_measures,
-    draws = as.data.frame(out)
-  ))
+  out
 }
+
