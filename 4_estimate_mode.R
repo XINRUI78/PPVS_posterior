@@ -1,3 +1,4 @@
+library(stats)
 estimate_mode <- function(x) {
   
   x <- as.numeric(x)
