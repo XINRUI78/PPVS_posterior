@@ -1,32 +1,62 @@
-# Randomly select 2 low-, 2 medium-, and 2 high-risk patients
-# from three equal-sized risk groups
-
-select_patients <- function(p_mean) {
+select_patients <- function(p_true) {
   
-  n <- length(p_mean)
-  ord <- order(p_mean)
+  p_true <- as.numeric(p_true)
   
-  groups <- cut(
-    seq_len(n),
-    breaks = 3,
-    labels = c("low", "medium", "high")
+  targets <- as.numeric(
+    quantile(
+      p_true,
+      probs = c(0.25, 0.50, 0.75),
+      na.rm = TRUE
+    )
   )
   
-  low_ids <- sample(ord[groups == "low"], 2)
-  medium_ids <- sample(ord[groups == "medium"], 2)
-  high_ids <- sample(ord[groups == "high"], 2)
+  choose_two <- function(target, excluded = integer(0)) {
+    
+    available <- setdiff(
+      seq_along(p_true),
+      excluded
+    )
+    
+    available[
+      order(
+        abs(p_true[available] - target)
+      )[1:2]
+    ]
+  }
   
-  c(low_ids, medium_ids, high_ids)
+  low_ids <- choose_two(
+    target = targets[1]
+  )
+  
+  medium_ids <- choose_two(
+    target = targets[2],
+    excluded = low_ids
+  )
+  
+  high_ids <- choose_two(
+    target = targets[3],
+    excluded = c(low_ids, medium_ids)
+  )
+  
+  c(
+    low_ids,
+    medium_ids,
+    high_ids
+  )
 }
 
 # Keep posterior probability draws for selected six patients only
 # Output has 6 columns: low1, low2, medium1, medium2, high1, high2
-
-make_patient_draws <- function(p_draws, selected_ids, yval) {
+make_patient_draws <- function(
+    p_draws,
+    selected_ids,
+    n_observations
+) {
   
-  if (ncol(p_draws) != length(yval)) {
-    p_draws <- t(p_draws)
-  }
+  p_draws <- orient_draw_matrix(
+    draw_matrix = p_draws,
+    n_observations = n_observations
+  )
   
   p_small <- p_draws[, selected_ids, drop = FALSE]
   
