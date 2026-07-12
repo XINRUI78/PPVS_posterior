@@ -1,3 +1,8 @@
+# n.true = NULL:
+#   independent standard-normal predictors
+# n.true supplied:
+#   first n.true predictors have pairwise correlation 0.5
+
 generate_ss <- function(n, n.para, beta0, beta, n.true = NULL) {
   
   # Covariance matrix
