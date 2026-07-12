@@ -67,7 +67,7 @@ run_nor <- function(i, ndev, nval, n.para, beta0, beta,
   selected_patients <- select_patients(p_ref)
   
   ref_row <- c(
-    0.3, 0.8, ndev, "la-ref",
+    0.3, 0.8, ndev, "nor-ref",
     measures(yval, p_ref), ref_draw_mean,
     rep(1, n.para),
     NA
@@ -161,7 +161,7 @@ run_nor <- function(i, ndev, nval, n.para, beta0, beta,
   }
   
   suggest_row <- c(
-    0.3, 0.8, ndev, "la-1se",
+    0.3, 0.8, ndev, "nor-1se",
     measures(yval, p_suggest),
     suggest_draw_mean,
     get_selected(vs, size_suggested),
@@ -169,7 +169,7 @@ run_nor <- function(i, ndev, nval, n.para, beta0, beta,
   )
   
   best_row <- c(
-    0.3, 0.8, ndev, "la-best",
+    0.3, 0.8, ndev, "nor-best",
     measures(yval, p_best),
     best_draw_mean,
     get_selected(vs, size_best),
