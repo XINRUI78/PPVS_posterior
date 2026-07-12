@@ -36,7 +36,7 @@ orient_draw_matrix <- function(draw_matrix, n_observations) {
 }
 
 # ============================================================
-Four summaries of posterior predictions
+# Four summaries of posterior predictions
 # mean_beta:
 #   inverse-logit of mean linear predictor
 # mode_beta:
