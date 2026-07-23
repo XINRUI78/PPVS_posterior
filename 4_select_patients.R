@@ -48,7 +48,7 @@ select_patients <- function(p_true) {
 set.seed(999)
 
 patient_pool <- generate_ss(
-  n = 10000,
+  n = 1000,
   n.para = n.para,
   beta0 = beta0,
   beta = beta,
