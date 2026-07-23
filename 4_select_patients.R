@@ -55,11 +55,7 @@ patient_pool <- generate_ss(
   n.true = n.true
 )
 
-patient_pool_x <- patient_pool[
-  ,
-  -1,
-  drop = FALSE
-]
+patient_pool_x <- patient_pool[, -1, drop = FALSE]
 
 patient_pool_eta <- as.numeric(
   beta0 +
@@ -83,18 +79,10 @@ patient_names <- c(
   "high2"
 )
 
-fixed_patients <- patient_pool_x[
-  fixed_patient_ids,
-  ,
-  drop = FALSE
-]
-
+fixed_patients <- patient_pool_x[fixed_patient_ids, ,drop = FALSE]
 rownames(fixed_patients) <- patient_names
 
-fixed_patient_truth <- patient_pool_ptrue[
-  fixed_patient_ids
-]
-
+fixed_patient_truth <- patient_pool_ptrue[fixed_patient_ids]
 names(fixed_patient_truth) <- patient_names
 
 # Keep posterior probability draws for selected six patients only
