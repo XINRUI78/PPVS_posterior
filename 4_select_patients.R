@@ -45,6 +45,58 @@ select_patients <- function(p_true) {
   )
 }
 
+set.seed(999)
+
+patient_pool <- generate_ss(
+  n = 10000,
+  n.para = n.para,
+  beta0 = beta0,
+  beta = beta,
+  n.true = n.true
+)
+
+patient_pool_x <- patient_pool[
+  ,
+  -1,
+  drop = FALSE
+]
+
+patient_pool_eta <- as.numeric(
+  beta0 +
+    as.matrix(patient_pool_x) %*% beta
+)
+
+patient_pool_ptrue <- plogis(
+  patient_pool_eta
+)
+
+fixed_patient_ids <- select_patients(
+  p_true = patient_pool_ptrue
+)
+
+patient_names <- c(
+  "low1",
+  "low2",
+  "medium1",
+  "medium2",
+  "high1",
+  "high2"
+)
+
+fixed_patients <- patient_pool_x[
+  fixed_patient_ids,
+  ,
+  drop = FALSE
+]
+
+rownames(fixed_patients) <- patient_names
+
+fixed_patient_truth <- patient_pool_ptrue[
+  fixed_patient_ids
+]
+
+names(fixed_patient_truth) <- patient_names
+
 # Keep posterior probability draws for selected six patients only
 # Output has 6 columns: low1, low2, medium1, medium2, high1, high2
 make_patient_draws <- function(
