@@ -5,7 +5,7 @@ select_patients <- function(p_true) {
   targets <- as.numeric(
     quantile(
       p_true,
-      probs = c(0.25, 0.50, 0.75),
+      probs = c(0.1, 0.50, 0.9),
       na.rm = TRUE
     )
   )
