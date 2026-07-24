@@ -7,9 +7,6 @@ source("4_estimate_mode.R")
 source("5_run_hs_p.R")
 
 
-# ============================================================
-# Read cluster job arguments
-# ============================================================
 sim_id <- as.integer(Sys.getenv("SGE_TASK_ID"))
 
 scenario_id <- as.integer(Sys.getenv("SCENARIO_ID"))
@@ -27,14 +24,10 @@ scenarios <- list(
 
 scenario <- scenarios[[scenario_id]]
 
-
-fixed_patient_file <- file.path(
-  "fixed_patients",
-  paste0(
-    "scenario",
-    scenario_id,
-    "_fixed_patients.rds"
-  )
+fixed_patient_file <- paste0(
+  "scenario",
+  scenario_id,
+  "_fixed_patients.rds"
 )
 
 fixed_patients <- readRDS(
