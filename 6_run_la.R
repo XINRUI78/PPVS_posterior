@@ -98,7 +98,15 @@ fixed_patients <- as.data.frame(
 )
 
 n_cores <- as.integer(
-  Sys.getenv("NSLOTS", unset = "1")
+  Sys.getenv(
+    "NSLOTS",
+    unset = "32"
+  )
+)
+
+n_cores <- max(
+  1L,
+  n_cores
 )
 
 cl <- parallel::makeCluster(n_cores)
