@@ -7,7 +7,6 @@ perform_n <- function(
     n.para,
     beta0,
     beta,
-    nval,
     fixed_patients,
     n.loop = 100
 ) {
