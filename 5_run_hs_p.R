@@ -1,3 +1,12 @@
+library(tidyverse)
+library(rstanarm)
+library(projpred)
+library(loo)
+library(glmnet)
+library(foreach)
+library(doParallel)
+library(MASS)
+
 run_hs_p <- function(
     i,
     ndev,
