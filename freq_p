@@ -1,0 +1,414 @@
+library(doParallel)
+library(foreach)
+
+
+perform_n <- function(
+    ndev,
+    n.para,
+    beta0,
+    beta,
+    nval,
+    fixed_patients,
+    n.loop = 100
+) {
+
+  predictor_names <- paste0(
+    "X",
+    seq_len(n.para)
+  )
+
+  # Models receive predictors only
+  fixed_x <- fixed_patients[, predictor_names, drop = FALSE]
+
+  fixed_y <- fixed_patients$y
+  fixed_p_true <- fixed_patients$p_true
+
+  patient_id <- seq_len(
+    nrow(fixed_patients)
+  )
+
+   # Register parallel backend with the number of cores available
+  n.cores <- parallel::detectCores() - 2  # use one less than total cores to avoid overloading
+  cl <- makeCluster(n.cores)
+  registerDoParallel(cl)
+
+  prev <- 0.3
+  auc <- 0.8
+  n.loop <- 100 # first try 5 loops to check the code, then 100
+  results <- foreach(i = 1: n.loop, .combine = rbind, .packages = c("glmnet", "pROC", "stats", "tidyverse", "rstanarm", "projpred", "loo", "pander"),
+                     .export = c("generate_ss", "back_logit", "backward_pvalue", "mod_penal_ave_foreach")) %dopar%{
+
+    set.seed(i)
+
+    data.dev <- generate_ss(
+      ndev,
+      n.para,
+      beta0,
+      beta
+    )
+    x <- data.dev[,-1]
+    y <- data.dev[,1]
+
+    # ========================================================
+    # Initialise six-patient probability results
+    # ========================================================
+
+    patient_result <- expand.grid(
+      simulation = i,
+      method = c(
+        "MLE",
+        "BE-5%",
+        "LS-min",
+        "LS-mod"
+      ),
+      patient_id = patient_id,
+      KEEP.OUT.ATTRS = FALSE,
+      stringsAsFactors = FALSE
+    )
+
+    patient_result$observed_y <- fixed_y[
+      patient_result$patient_id
+    ]
+
+    patient_result$p_true <- fixed_p_true[
+      patient_result$patient_id
+    ]
+
+    patient_result$p_estimated <- NA_real_
+
+
+    # ========================================================
+    # Method 1: full maximum-likelihood model
+    # ========================================================
+
+    tryCatch({
+
+      fit <- glm(
+        y ~ .,
+        data = data.dev,
+        family = binomial()
+      )
+
+      # Six fixed-patient predictions
+      p_patient_mle <- as.numeric(
+        predict(
+          fit,
+          newdata = fixed_x,
+          type = "response"
+        )
+      )
+
+      patient_result$p_estimated[
+        patient_result$method == "MLE"
+      ] <- p_patient_mle
+
+    }, error = function(e) {
+
+      message(
+        "Simulation ",
+        i,
+        ": error in MLE: ",
+        conditionMessage(e)
+      )
+    })
+
+
+    # ========================================================
+    # Method 2: backward elimination, p < 0.05
+    # ========================================================
+
+    tryCatch({
+
+      p_threshold <- 0.05
+
+      back_05 <- back_logit(
+        data.dev,
+        "y",
+        "p_value",
+        p_threshold
+      )
+
+      varsel_back_05 <- back_05$varsel_back
+      backmodel_05 <- back_05$backmodel
+
+      selected_names <- predictor_names[
+        varsel_back_05 == 1
+      ]
+
+      # Six fixed-patient predictions
+      p_patient_be <- as.numeric(
+        predict(
+          backmodel_05,
+          newdata = fixed_x,
+          type = "response"
+        )
+      )
+
+      patient_result$p_estimated[
+        patient_result$method == "BE-5%"
+      ] <- p_patient_be
+
+    }, error = function(e) {
+
+      message(
+        "Simulation ",
+        i,
+        ": error in backward elimination: ",
+        conditionMessage(e)
+      )
+    })
+
+
+    # ========================================================
+    # Method 3: standard LASSO using lambda.min
+    # ========================================================
+
+    tryCatch({
+
+      lasso <- glmnet::cv.glmnet(
+        x = as.matrix(x),
+        y = y,
+        alpha = 1,
+        family = "binomial",
+        type.measure = "deviance"
+      )
+
+      lambda_min <- lasso$lambda.min
+     
+      # Six fixed-patient predictions
+      p_patient_lasso <- as.numeric(
+        predict(
+          lasso,
+          newx = as.matrix(fixed_x),
+          s = lambda_min,
+          type = "response"
+        )
+      )
+
+      patient_result$p_estimated[
+        patient_result$method == "LS-min"
+      ] <- p_patient_lasso
+
+    }, error = function(e) {
+
+      message(
+        "Simulation ",
+        i,
+        ": error in LASSO: ",
+        conditionMessage(e)
+      )
+    })
+
+
+    # ========================================================
+    # Method 4: modified LASSO
+    # ========================================================
+
+    tryCatch({
+      nfolds <- 10
+      f <- nfolds / (nfolds - 1) - 1
+      mod_lasso <- mod_penal_ave_foreach(x = as.matrix(x), y = y, bn = 20, method = "lasso", f = f,
+                  parallel = FALSE, nfolds = nfolds, boot = TRUE)
+      eta_mod_lasso <- as.matrix(cbind(1,fixed_x))%*% mod_lasso$beta.boot
+      p_mod_lasso <- as.vector(1/(1+exp(-eta_mod_lasso)))
+
+      patient_result$p_estimated[
+        patient_result$method == "LS-mod"
+      ] <- p_mod_lasso
+
+    }, error = function(e) {
+
+      message(
+        "Simulation ",
+        i,
+        ": error in modified LASSO: ",
+        conditionMessage(e)
+      )
+    })
+
+
+    method_result$simulation <- i
+
+    list(
+      patient_predictions = patient_result
+    )
+  }
+
+  patient_predictions <- do.call(
+    rbind,
+    lapply(
+      simulation_results,
+      function(z) z$patient_predictions
+    )
+  )
+
+  rownames(patient_predictions) <- NULL
+
+
+  # Ensure numerical patient columns
+  patient_predictions$simulation <- as.integer(
+    patient_predictions$simulation
+  )
+
+  patient_predictions$patient_id <- as.integer(
+    patient_predictions$patient_id
+  )
+
+  patient_predictions$observed_y <- as.numeric(
+    patient_predictions$observed_y
+  )
+
+  patient_predictions$p_true <- as.numeric(
+    patient_predictions$p_true
+  )
+
+  patient_predictions$p_estimated <- as.numeric(
+    patient_predictions$p_estimated
+  )
+
+
+  # ==========================================================
+  # Return both outputs
+  # ==========================================================
+
+  list(
+    performance = performance_results,
+    patient_predictions = patient_predictions
+  )
+}
+
+
+# ============================================================
+# Load the fixed patients for the relevant scenario
+# ============================================================
+
+fixed_patients <- readRDS(
+  "scenario1_fixed_patients.rds"
+)
+
+
+# ============================================================
+# Run the three development-sample sizes
+# ============================================================
+
+freq_n <- perform_n(
+  ndev = ndev,
+  n.para = n.para,
+  beta0 = beta0,
+  beta = beta,
+  nval = nval,
+  fixed_patients = fixed_patients,
+  n.loop = 100
+)
+
+freq_n_2 <- perform_n(
+  ndev = ndev1,
+  n.para = n.para,
+  beta0 = beta0,
+  beta = beta,
+  nval = nval,
+  fixed_patients = fixed_patients,
+  n.loop = 100
+)
+
+freq_n_4 <- perform_n(
+  ndev = ndev2,
+  n.para = n.para,
+  beta0 = beta0,
+  beta = beta,
+  nval = nval,
+  fixed_patients = fixed_patients,
+  n.loop = 100
+)
+
+
+# ============================================================
+# Access validation-performance results
+# ============================================================
+
+performance_n <- freq_n$performance
+performance_n_2 <- freq_n_2$performance
+performance_n_4 <- freq_n_4$performance
+
+
+# ============================================================
+# Access six-patient probability results
+# ============================================================
+
+patient_probs_n <- freq_n$patient_predictions
+patient_probs_n_2 <- freq_n_2$patient_predictions
+patient_probs_n_4 <- freq_n_4$patient_predictions
+
+
+# Example: inspect the six patients in simulation 1
+subset(
+  patient_probs_n,
+  simulation == 1
+)
+
+
+# ============================================================
+# Summarise probabilities across simulations
+# ============================================================
+
+patient_probability_summary <- aggregate(
+  p_estimated ~ method + patient_id + p_true,
+  data = patient_probs_n,
+  FUN = function(x) {
+    c(
+      mean = mean(x, na.rm = TRUE),
+      sd = sd(x, na.rm = TRUE),
+      bias = mean(x, na.rm = TRUE)
+    )
+  }
+)
+
+
+# A cleaner summary with separate columns
+patient_probability_summary <- do.call(
+  rbind,
+  lapply(
+    split(
+      patient_probs_n,
+      list(
+        patient_probs_n$method,
+        patient_probs_n$patient_id
+      ),
+      drop = TRUE
+    ),
+    function(d) {
+
+      valid_predictions <- d$p_estimated[
+        !is.na(d$p_estimated)
+      ]
+
+      data.frame(
+        method = d$method[1],
+        patient_id = d$patient_id[1],
+        observed_y = d$observed_y[1],
+        p_true = d$p_true[1],
+        mean_probability = mean(
+          valid_predictions
+        ),
+        sd_probability = sd(
+          valid_predictions
+        ),
+        bias = mean(
+          valid_predictions
+        ) - d$p_true[1],
+        mse = mean(
+          (
+            valid_predictions -
+              d$p_true[1]
+          )^2
+        ),
+        successful_simulations = length(
+          valid_predictions
+        )
+      )
+    }
+  )
+)
+
+rownames(patient_probability_summary) <- NULL
+```
