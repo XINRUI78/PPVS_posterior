@@ -76,9 +76,7 @@ scenario_parameters <- list(
   )
 )
 
-scenario <- scenario_parameters[
-  [as.character(scenario_id)]
-]
+scenario <- scenario_parameters[[as.character(scenario_id)]]
 
 ndev_current <- ndev
 
