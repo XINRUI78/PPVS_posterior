@@ -94,7 +94,7 @@ run_la_p <- function(
     adapt_delta = 0.99,
     iter = 4000,
     chains = 4,
-    cores = 4,
+    cores = 1,
     refresh = 0
   )
   
