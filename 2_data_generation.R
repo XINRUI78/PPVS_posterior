@@ -19,3 +19,21 @@ generate_ss <- function(n, n.para, beta0, beta, n.true = NULL) {
   p <- 1/(1+exp(-eta))
   y <- rbinom(n, 1, p)
   data <- data.frame(y,x)}
+
+orient_draw_matrix <- function(draw_matrix, n_observations) {
+  
+  draw_matrix <- as.matrix(draw_matrix)
+  
+  if (ncol(draw_matrix) == n_observations) {
+    return(draw_matrix)
+  }
+  
+  if (nrow(draw_matrix) == n_observations) {
+    return(t(draw_matrix))
+  }
+  
+  stop(
+    "Neither dimension of the prediction matrix matches ",
+    "the number of validation observations."
+  )
+}
