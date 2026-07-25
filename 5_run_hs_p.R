@@ -24,7 +24,7 @@ run_hs_p <- function(
   SEED <- as.integer(i)
   
   # Store full draws only for simulations 1 to 10
-  save_full_draws <- i <= 10
+  save_full_draws <- i <= 10 && ndev >= 1500
   
   # ==========================================================
   # Extract saved patient information
