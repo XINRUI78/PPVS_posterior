@@ -97,32 +97,17 @@ fixed_patients <- as.data.frame(
   readRDS(fixed_patient_file)
 )
 
-
 n_cores <- as.integer(
-  Sys.getenv(
-    "NSLOTS",
-    unset = "32"
-  )
+  Sys.getenv("NSLOTS", unset = "1")
 )
 
-n_cores <- max(
-  1L,
-  n_cores
-)
-
-cl <- parallel::makeCluster(
-  n_cores
-)
-
-doParallel::registerDoParallel(
-  cl
-)
+cl <- parallel::makeCluster(n_cores)
+doParallel::registerDoParallel(cl)
 
 on.exit(
   parallel::stopCluster(cl),
   add = TRUE
 )
-
 
 # ============================================================
 # Run 100 simulations
