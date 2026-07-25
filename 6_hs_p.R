@@ -39,7 +39,7 @@ fixed_patients <- as.data.frame(
 # ============================================================
 # Run horseshoe analysis
 # ============================================================
-out <- run_hs(
+out <- run_hs_p(
   i = sim_id,
   ndev = ndev_current,
   n.para = n.para,
