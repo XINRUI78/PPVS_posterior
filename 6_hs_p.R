@@ -54,8 +54,18 @@ out <- run_hs_p(
 
 result_dir <- paste0("results/scenario", scenario_id, "_ndev", ndev_id, "_hs")
 
-dir.create(file.path(result_dir, "patient_mean_predictions"), recursive = TRUE, showWarnings = FALSE)
-dir.create(file.path(result_dir, "patient_draws"), recursive = TRUE, showWarnings = FALSE)
+mean_prediction_dir <- file.path(
+  result_dir,
+  "patient_mean_predictions"
+)
+
+patient_draw_dir <- file.path(
+  result_dir,
+  "patient_draws"
+)
+
+dir.create(mean_prediction_dir, recursive = TRUE, showWarnings = FALSE)
+dir.create(patient_draw_dir, recursive = TRUE, showWarnings = FALSE)
 
 base_name <- paste0(
   "scenario", scenario_id,
