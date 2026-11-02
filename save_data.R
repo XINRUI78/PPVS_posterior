@@ -8,7 +8,7 @@ dir.create("simulation_data", showWarnings = FALSE)
 for (s in 1:5) {
 
   # Select scenario-specific parameters
-  beta0 <- beta0_list[s]
+  beta0 <- beta0_list[[s]]
   beta  <- beta_list[[s]]
   sigma <- sigma_list[[s]]
 
