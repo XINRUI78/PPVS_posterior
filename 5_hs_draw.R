@@ -7,6 +7,19 @@ library(foreach)
 library(doParallel)
 library(MASS)
 
+simulation_file <- function(
+    scenario_id, ndev, i,
+    data_dir = "simulation_data"
+) {
+  file.path(
+    data_dir,
+    sprintf(
+      "s%02d_ndev_%d_rep_%03d.rds",
+      scenario_id, ndev, i
+    )
+  )
+}
+
 run_hs <- function(
     i,
     ndev,
@@ -28,26 +41,20 @@ run_hs <- function(
   # 2. ndev >= 1500
   run_draw_details <- i <= 10 && ndev >= 1500
   
-  # ----------------------------------------------------------
-  # Generate data
-  # ----------------------------------------------------------
-  
-  data.dev <- generate_ss(
-    n = ndev,
-    n.para = n.para,
-    beta0 = beta0,
-    beta = beta,
-    n.true = n.true
+  # Load saved development and validation data
+
+  data_file <- simulation_file(
+    scenario_id = scenario_id,
+    ndev = ndev,
+    i = i,
+    data_dir = data_dir
   )
-  
-  data.val <- generate_ss(
-    n = nval,
-    n.para = n.para,
-    beta0 = beta0,
-    beta = beta,
-    n.true = n.true
-  )
-  
+    
+  sim_data <- readRDS(data_file)
+
+  data.dev <- sim_data$data.dev
+  data.val <- sim_data$data.val
+    
   xval <- data.val[, -1]
   yval <- as.numeric(data.val[, 1])
   
@@ -202,28 +209,19 @@ run_hs <- function(
   
   ref_row <- c(
     ndev, "hs-ref",
-    measures(yval, ref_predictions$mean_beta),
-    measures(yval, ref_predictions$mode_beta),
     measures(yval, ref_predictions$mean_probability),
-    measures(yval, ref_predictions$mode_probability),
     rep(1, n.para)
   )
   
   suggest_row <- c(
     ndev, "hs-1se",
-    measures(yval, suggest_predictions$mean_beta),
-    measures(yval, suggest_predictions$mode_beta),
     measures(yval, suggest_predictions$mean_probability),
-    measures(yval, suggest_predictions$mode_probability),
     get_selected(vs, size_suggested)
   )
   
   best_row <- c(
     ndev, "hs-best",
-    measures(yval, best_predictions$mean_beta),
-    measures(yval, best_predictions$mode_beta),
     measures(yval, best_predictions$mean_probability),
-    measures(yval, best_predictions$mode_probability),
     get_selected(vs, size_best)
   )
   
@@ -237,15 +235,13 @@ run_hs <- function(
     "calibration_slope",
     "calibration_in_the_large",
     "auc",
-    "rmspe"
+    "brier_score",
+    "mape"
   )
   
   colnames(summary_result) <- c(
     "ndev", "method",
-    paste0(measure_names, "_mean_beta"),
-    paste0(measure_names, "_mode_beta"),
     paste0(measure_names, "_mean_probability"),
-    paste0(measure_names, "_mode_probability"),
     paste0("varsel", seq_len(n.para))
   )
   
