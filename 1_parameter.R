@@ -1,11 +1,15 @@
+source("opt_beta.R")
 ######### Set simulation parameters
 n.para <- 30
 prev <- 0.3
 c <- 0.8
 nval <- 10000
+
 percentage1 <- c(0.1, 0.2, 0.2, 0.5)
-percentage2 <- c(0.5, 0, 0, 0.5)
-percentage3 <- c(0.2, 0.4, 0.4, 0)
+percentage2 <- c(0.1, 0.2, 0.2, 0.5)
+percentage3 <- c(0.5, 0, 0, 0.5)
+percentage4 <- c(0.2, 0.4, 0.4, 0)
+percentage5 <- c(0.1, 0.2, 0.2, 0.5)
 
 make_weights <- function(n.para, percentage) {
   # Define number of predictors with relative strengths
@@ -23,197 +27,49 @@ make_weights <- function(n.para, percentage) {
   return(weights)
 }
 
-
 # Assign relative strengths
 
 weights1 <- make_weights(n.para, percentage1)
 weights2 <- make_weights(n.para, percentage2)
 weights3 <- make_weights(n.para, percentage3)
+weights4 <- make_weights(n.para, percentage4)
+weights5 <- make_weights(n.para, percentage5)
 
-ndev <- 1538
+# Assign correlation matrix
+sigma1 <- diag(n.para)
+sigma2 <- diag(n.para)
+sigma2[1:n.para, 1:n.para] <- 0.5
+diag(sigma2) <- 1  # Ensure variances remain 1
+sigma3 <- diag(n.para)
+sigma4 <- diag(n.para)
+sigma5 <- diag(n.para)
+for (j in seq(1, 7, by=2)) {
+       sigma5[j, j+1] <- -0.7
+       sigma5[j+1, j] <- -0.7
+}
+
+# Sample sizes
+ndev <- 1505
 ndev1 <- round(ndev/2)
 ndev2 <- round(ndev/4)
-######### obtain the coefficents of beta
-library(mvtnorm)
-library(pROC)
-opt_beta_cor <- function(n.para, prev, c, weights, sigma) {
-  # Generate predictors (X) from multivariate normal distribution
-  n = 500000
-  # Generate data
-  x <- mvtnorm::rmvnorm(n, mean = rep(0, n.para), sigma = sigma)
-  
-  
-  objective <- function(para){
-    beta0 <- para[1]  # Intercept
-    s <- para[2]      # Scaling factor
-    beta1 <- s * weights
-    eta <- rep(beta0, n) + x %*% beta1
-    p <- 1/(1+exp(-eta))
-    y <- stats::rbinom(n, 1, p)
-    pest <- mean(y)
-    cstat <- pROC::roc(response = as.vector(y), predictor = as.vector(p), levels = c(0, 1), direction = "<")
-    cest <- as.vector(cstat$auc)
-    return((pest - prev)^2 + (cest - c)^2)
-  }
-  # Initial guesses for beta0 and s
-  initial_para <- c(log(prev/(1-prev)), 1)
-  tol = 1e-6
-  # Perform optimization
-  result <- optim(
-    par = initial_para,
-    fn = objective,
-    method = "Nelder-Mead", 
-    control = list(abstol = tol)
-  )
-  
-  # Extract optimized coefficients
-  beta0_opt <- result$par[1]
-  s_opt <- result$par[2]
-  beta1_opt <- s_opt * weights
-  
-  list(
-    beta0 = beta0_opt,
-    beta1 = beta1_opt,
-    s = s_opt
-  )
-}
+
 # Obtain the true coefficients
-opt_beta <- opt_beta_cor(n.para, prev, c, weights, sigma)
-beta0 <- opt_beta$beta0
-beta <- opt_beta$beta1
+opt_beta <- opt_beta(n.para, prev, c, weights1, sigma1)
+beta0_1 <- opt_beta$beta0
+beta_1 <- opt_beta$beta1
 
-
-opt_beta <- function(n.para, prev, c, weights) {
-  # Generate predictors (X) from multivariate normal distribution
-  n = 500000
-  x <- rmvnorm(n, mean = rep(0, n.para), sigma = diag(n.para))
-  objective <- function(para){
-    beta0 <- para[1]  # Intercept
-    s <- para[2]      # Scaling factor
-    beta1 <- s * weights
-    eta <- rep(beta0, n) + x %*% beta1
-    p <- 1/(1+exp(-eta))
-    y <- rbinom(n, 1, p)
-    pest <- mean(y)
-    cstat <- roc(response = as.vector(y), predictor = as.vector(p), levels = c(0, 1), direction = "<")
-    cest <- as.vector(cstat$auc)
-    return((pest - prev)^2 + (cest - c)^2)
-  }
-  # Initial guesses for beta0 and s
-  initial_para <- c(-2, 1)
-  tol = 1e-6
-  # Perform optimization
-  result <- optim(
-    par = initial_para,
-    fn = objective,
-    method = "Nelder-Mead",
-    control = list(abstol = tol)
-  )
-
-  # Extract optimized coefficients
-  beta0_opt <- result$par[1]
-  s_opt <- result$par[2]
-  beta1_opt <- s_opt * weights
-
-  list(
-    beta0 = beta0_opt,
-    beta1 = beta1_opt,
-    s = s_opt
-  )
-}
-opt_beta <- opt_beta(n.para, prev, c, weights2)
+opt_beta <- opt_beta(n.para, prev, c, weights2, sigma2)
 beta0_2 <- opt_beta$beta0
 beta_2 <- opt_beta$beta1
-opt_beta <- function(n.para, prev, c, weights) {
-  # Generate predictors (X) from multivariate normal distribution
-  n = 500000
-  x <- rmvnorm(n, mean = rep(0, n.para), sigma = diag(n.para))
-  objective <- function(para){
-    beta0 <- para[1]  # Intercept
-    s <- para[2]      # Scaling factor
-    beta1 <- s * weights
-    eta <- rep(beta0, n) + x %*% beta1
-    p <- 1/(1+exp(-eta))
-    y <- rbinom(n, 1, p)
-    pest <- mean(y)
-    cstat <- roc(response = as.vector(y), predictor = as.vector(p), levels = c(0, 1), direction = "<")
-    cest <- as.vector(cstat$auc)
-    return((pest - prev)^2 + (cest - c)^2)
-  }
-  # Initial guesses for beta0 and s
-  initial_para <- c(-2, 1)
-  tol = 1e-6
-  # Perform optimization
-  result <- optim(
-    par = initial_para,
-    fn = objective,
-    method = "Nelder-Mead",
-    control = list(abstol = tol)
-  )
 
-  # Extract optimized coefficients
-  beta0_opt <- result$par[1]
-  s_opt <- result$par[2]
-  beta1_opt <- s_opt * weights
-
-  list(
-    beta0 = beta0_opt,
-    beta1 = beta1_opt,
-    s = s_opt
-  )
-}
-opt_beta <- opt_beta(n.para, prev, c, weights3)
+opt_beta <- opt_beta(n.para, prev, c, weights3, sigma3)
 beta0_3 <- opt_beta$beta0
 beta_3 <- opt_beta$beta1
 
-# Define the optimizer function
-opt_beta_var <- function(n.para, n.true, prev, c, weights) {
-  # Generate predictors (X) from multivariate normal distribution
-  n = 500000
-  sigma <- diag(n.para)
-  sigma[1:n.true, 1:n.true] <- 0.5
-  diag(sigma) <- 1  # Ensure variances remain 1
-  
-  # Generate data
-  x <- mvtnorm::rmvnorm(n, mean = rep(0, n.para), sigma = sigma)
-  
-  
-  objective <- function(para){
-    beta0 <- para[1]  # Intercept
-    s <- para[2]      # Scaling factor
-    beta1 <- s * weights
-    eta <- rep(beta0, n) + x %*% beta1
-    p <- 1/(1+exp(-eta))
-    y <- stats::rbinom(n, 1, p)
-    pest <- mean(y)
-    cstat <- pROC::roc(response = as.vector(y), predictor = as.vector(p), levels = c(0, 1), direction = "<")
-    cest <- as.vector(cstat$auc)
-    return((pest - prev)^2 + (cest - c)^2)
-  }
-  # Initial guesses for beta0 and s
-  initial_para <- c(log(prev/(1-prev)), 1)
-  tol = 1e-6
-  # Perform optimization
-  result <- optim(
-    par = initial_para,
-    fn = objective,
-    method = "Nelder-Mead", 
-    control = list(abstol = tol)
-  )
-  
-  # Extract optimized coefficients
-  beta0_opt <- result$par[1]
-  s_opt <- result$par[2]
-  beta1_opt <- s_opt * weights
-  
-  list(
-    beta0 = beta0_opt,
-    beta1 = beta1_opt,
-    s = s_opt
-  )
-}
-
-n.true <- 15
-opt_beta <- opt_beta_var(n.para, n.true, prev, c, weights1)
+opt_beta <- opt_beta(n.para, prev, c, weights4, sigma4)
 beta0_4 <- opt_beta$beta0
 beta_4 <- opt_beta$beta1
+
+opt_beta <- opt_beta(n.para, prev, c, weights5, sigma5)
+beta0_5 <- opt_beta$beta0
+beta_5 <- opt_beta$beta1
