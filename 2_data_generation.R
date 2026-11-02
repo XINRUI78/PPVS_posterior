@@ -1,7 +1,7 @@
  # Generate data
 library(mvtnorm)
 library(stats)
-generate_ss_cor <- function(n, n.para, beta0, beta, sigma){
+generate_ss <- function(n, n.para, beta0, beta, sigma){
   x <- rmvnorm(n, mean = rep(0, n.para), sigma = sigma)
   eta <- rep(beta0, n) + x%*%beta
   p <- 1/(1+exp(-eta))
