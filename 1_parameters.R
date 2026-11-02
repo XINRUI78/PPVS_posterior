@@ -48,7 +48,7 @@ for (j in seq(1, 7, by=2)) {
        sigma5[j+1, j] <- -0.7
 }
 
-sigma_list <- c(sigma1, sigma2, sigma3, sigma4, sigma5)
+sigma_list <- list(sigma1, sigma2, sigma3, sigma4, sigma5)
 
 # Sample sizes
 ndev <- 1505
