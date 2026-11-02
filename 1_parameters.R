@@ -52,8 +52,8 @@ sigma_list <- list(sigma1, sigma2, sigma3, sigma4, sigma5)
 
 # Sample sizes
 ndev1 <- 1505
-ndev2 <- round(ndev/2)
-ndev3 <- round(ndev/4)
+ndev2 <- round(ndev1/2)
+ndev3 <- round(ndev1/4)
 
 ndev_list <- c(ndev1, ndev2, ndev3)
 
