@@ -48,6 +48,8 @@ for (j in seq(1, 7, by=2)) {
        sigma5[j+1, j] <- -0.7
 }
 
+sigma_list <- c(sigma1, sigma2, sigma3, sigma4, sigma5)
+
 # Sample sizes
 ndev <- 1505
 ndev1 <- round(ndev/2)
@@ -73,3 +75,6 @@ beta_4 <- opt_beta$beta1
 opt_beta <- opt_beta(n.para, prev, c, weights5, sigma5)
 beta0_5 <- opt_beta$beta0
 beta_5 <- opt_beta$beta1
+
+beta_list <- list(beta_1, beta_2, beta_3, beta_4, beta_5)
+beta0_list <- list(beta0_1, beta0_2, beta0_3, beta0_4, beta0_5)
