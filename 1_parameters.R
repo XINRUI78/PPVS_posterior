@@ -79,5 +79,5 @@ result5 <- opt_beta(n.para, prev, c, weights5, sigma5)
 beta0_5 <- result5$beta0
 beta_5  <- result5$beta1
 
-beta_list <- c(beta_1, beta_2, beta_3, beta_4, beta_5)
+beta_list <- list(beta_1, beta_2, beta_3, beta_4, beta_5)
 beta0_list <- list(beta0_1, beta0_2, beta0_3, beta0_4, beta0_5)
