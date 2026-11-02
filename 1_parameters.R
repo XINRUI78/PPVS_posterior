@@ -56,25 +56,28 @@ ndev1 <- round(ndev/2)
 ndev2 <- round(ndev/4)
 
 # Obtain the true coefficients
-opt_beta <- opt_beta(n.para, prev, c, weights1, sigma1)
-beta0_1 <- opt_beta$beta0
-beta_1 <- opt_beta$beta1
 
-opt_beta <- opt_beta(n.para, prev, c, weights2, sigma2)
-beta0_2 <- opt_beta$beta0
-beta_2 <- opt_beta$beta1
+# Obtain the true coefficients
 
-opt_beta <- opt_beta(n.para, prev, c, weights3, sigma3)
-beta0_3 <- opt_beta$beta0
-beta_3 <- opt_beta$beta1
+result1 <- opt_beta(n.para, prev, c, weights1, sigma1)
+beta0_1 <- result1$beta0
+beta_1  <- result1$beta1
 
-opt_beta <- opt_beta(n.para, prev, c, weights4, sigma4)
-beta0_4 <- opt_beta$beta0
-beta_4 <- opt_beta$beta1
+result2 <- opt_beta(n.para, prev, c, weights2, sigma2)
+beta0_2 <- result2$beta0
+beta_2  <- result2$beta1
 
-opt_beta <- opt_beta(n.para, prev, c, weights5, sigma5)
-beta0_5 <- opt_beta$beta0
-beta_5 <- opt_beta$beta1
+result3 <- opt_beta(n.para, prev, c, weights3, sigma3)
+beta0_3 <- result3$beta0
+beta_3  <- result3$beta1
+
+result4 <- opt_beta(n.para, prev, c, weights4, sigma4)
+beta0_4 <- result4$beta0
+beta_4  <- result4$beta1
+
+result5 <- opt_beta(n.para, prev, c, weights5, sigma5)
+beta0_5 <- result5$beta0
+beta_5  <- result5$beta1
 
 beta_list <- list(beta_1, beta_2, beta_3, beta_4, beta_5)
 beta0_list <- list(beta0_1, beta0_2, beta0_3, beta0_4, beta0_5)
