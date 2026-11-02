@@ -51,9 +51,11 @@ for (j in seq(1, 7, by=2)) {
 sigma_list <- list(sigma1, sigma2, sigma3, sigma4, sigma5)
 
 # Sample sizes
-ndev <- 1505
-ndev1 <- round(ndev/2)
-ndev2 <- round(ndev/4)
+ndev1 <- 1505
+ndev2 <- round(ndev/2)
+ndev3 <- round(ndev/4)
+
+ndev_list <- c(ndev1, ndev2, ndev3)
 
 # Obtain the true coefficients
 
