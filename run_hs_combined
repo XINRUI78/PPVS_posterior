@@ -1,0 +1,402 @@
+library(tidyverse)
+library(rstanarm)
+library(projpred)
+
+# ============================================================
+# File path for saved simulation data
+# ============================================================
+
+simulation_file <- function(
+    scenario_id, ndev, i,
+    data_dir = "simulation_data"
+) {
+  file.path(
+    data_dir,
+    sprintf(
+      "s%02d_ndev_%d_rep_%03d.rds",
+      scenario_id, ndev, i
+    )
+  )
+}
+
+# ============================================================
+# Orient posterior draws
+# Rows = posterior draws; columns = observations
+# ============================================================
+
+orient_draws <- function(x, n_obs) {
+  x <- as.matrix(x)
+  
+  if (ncol(x) == n_obs) return(x)
+  if (nrow(x) == n_obs) return(t(x))
+  
+  stop(
+    "Unexpected draw dimensions: ",
+    paste(dim(x), collapse = " x ")
+  )
+}
+
+# ============================================================
+# Posterior probability mode
+# Boundary-reflected kernel density estimate
+# ============================================================
+
+probability_mode <- function(p) {
+  
+  p <- as.numeric(p)
+  p <- p[is.finite(p)]
+  
+  if (length(p) < 2L) return(NA_real_)
+  
+  if (diff(range(p)) < 1e-12) {
+    return(mean(p))
+  }
+  
+  # Reflection around probability boundaries 0 and 1
+  d <- density(
+    c(-p, p, 2 - p),
+    from = 0,
+    to = 1,
+    n = 2048,
+    bw = "nrd0"
+  )
+  
+  d$x[which.max(d$y)]
+}
+
+
+# ============================================================
+# Main function
+# ============================================================
+
+run_hs <- function(
+    i,
+    scenario_id,
+    ndev,
+    n.para,
+    beta0,
+    beta,
+    fixed_patients,
+    nterms_max = 30,
+    prediction_draws = 400,
+    projection_draws = 400,
+    data_dir = "simulation_data"
+) {
+  
+  SEED <- as.integer(100000*scenario_id+100*ndev+i)
+  
+  save_posterior <- (
+    i == 1 && ndev == 1505
+  )
+  
+  # ----------------------------------------------------------
+  # Load development and validation data
+  # ----------------------------------------------------------
+  
+  data_file <- simulation_file(
+    scenario_id, ndev, i, data_dir
+  )
+  
+  sim_data <- readRDS(data_file)
+  
+  data.dev <- sim_data$data.dev
+  data.val <- sim_data$data.val
+  
+  all_vars <- setdiff(names(data.dev), "y")
+  xval <- data.val[, all_vars, drop = FALSE]
+  yval <- as.numeric(data.val$y)
+  
+  # True validation probabilities
+  eta_true <- as.numeric(beta0 + as.matrix(xval) %*% as.numeric(beta))
+  p_true <- plogis(eta_true)
+  
+  # ----------------------------------------------------------
+  # Six fixed patients
+  # ----------------------------------------------------------
+  
+  patient_names <- c(
+    "low1", "low2",
+    "medium1", "medium2",
+    "high1", "high2"
+  )
+  
+  fixed_patients <- as.data.frame(fixed_patients)
+  
+  xpatient <- fixed_patients[
+    , all_vars, drop = FALSE
+  ]
+  
+  rownames(xpatient) <- patient_names
+  
+  # True probabilities
+  true_probability <- as.numeric(plogis(beta0 + as.matrix(xpatient) %*% as.numeric(beta)))
+  
+  # ----------------------------------------------------------
+  # Fit Horseshoe reference model ONCE
+  # ----------------------------------------------------------
+  
+  ref_formula <- reformulate(
+    all_vars, response = "y"
+  )
+  
+  ref_fit <- stan_glm(
+    formula = ref_formula,
+    data = data.dev,
+    family = binomial(link = "logit"),
+    prior = hs(),
+    prior_intercept = normal(0, 1),
+    QR = TRUE,
+    seed = SEED + 2000,
+    adapt_delta = 0.99,
+    iter = 4000,
+    chains = 4,
+    cores = 1,
+    refresh = 0
+  )
+  
+  ref_fit$call$formula <- ref_formula
+  ref_fit$call$data <- data.dev
+  ref_fit$call$seed <- SEED + 2000
+  
+  # ----------------------------------------------------------
+  # ProjPred selection ONCE
+  # ----------------------------------------------------------
+  
+  vs <- cv_varsel(
+    object = ref_fit,
+    method = "forward",
+    cv_method = "kfold",
+    K = 5,
+    validate_search = TRUE,
+    nterms_max = min(nterms_max, n.para),
+    seed = SEED + 3000
+  )
+  
+  # Selected-variable indicators
+  get_selected <- function(vs, k) {
+    
+    if (k == 0) {
+      sel_vars <- character(0)
+    } else {
+      sel_vars <- ranking(vs)$fulldata[1:k]
+    }
+    as.integer(all_vars %in% sel_vars)
+  }
+  
+  size_suggested <- suggest_size(vs)
+  
+  perf <- performances(vs)$submodels
+  
+  # Best ELPD model size
+  get_best_size <- function(vs) {
+    perf <- performances(vs)$submodels
+    perf$size[which.max(replace(perf$elpd, is.na(perf$elpd), -Inf))]
+  }
+  
+  size_best <- get_best_size(vs)
+  
+  proj_suggest <- project(
+    object = vs,
+    nterms = size_suggested,
+    ns = projection_draws,
+    seed = SEED + 40000
+  )
+  
+  proj_best <- project(
+    object = vs,
+    nterms = size_best,
+    ns = projection_draws,
+    seed = SEED + 40001
+  )
+  
+  # ----------------------------------------------------------
+  # Posterior mean predictions for validation observations
+  # ----------------------------------------------------------
+  
+  eta_ref_val <- posterior_linpred(
+    object = ref_fit,
+    newdata = xval,
+    transform = FALSE,
+    draws = prediction_draws
+  )
+  
+  p_ref_val <- colMeans(
+    plogis(
+      orient_draws(
+        eta_ref_val, nrow(xval)
+      )
+    )
+  )
+  
+  rm(eta_ref_val)
+  
+  eta_1se_val <- proj_linpred(
+    object = proj_suggest,
+    newdata = xval,
+    integrated = FALSE,
+    transform = FALSE
+  )$pred
+  
+  p_1se_val <- colMeans(
+    plogis(
+      orient_draws(
+        eta_1se_val, nrow(xval)
+      )
+    )
+  )
+  
+  rm(eta_1se_val)
+  
+  eta_best_val <- proj_linpred(
+    object = proj_best,
+    newdata = xval,
+    integrated = FALSE,
+    transform = FALSE
+  )$pred
+  
+  p_best_val <- colMeans(
+    plogis(
+      orient_draws(
+        eta_best_val, nrow(xval)
+      )
+    )
+  )
+  
+  rm(eta_best_val)
+  
+  # ----------------------------------------------------------
+  # Posterior draws for six fixed patients
+  # ----------------------------------------------------------
+  
+  eta_ref_pat <- posterior_linpred(
+    object = ref_fit,
+    newdata = xpatient,
+    transform = FALSE,
+    draws = prediction_draws
+  )
+  
+  p_ref_pat <- plogis(
+    orient_draws(
+      eta_ref_pat, nrow(xpatient)
+    )
+  )
+  
+  eta_1se_pat <- proj_linpred(
+    object = proj_suggest,
+    newdata = xpatient,
+    integrated = FALSE,
+    transform = FALSE
+  )$pred
+  
+  p_1se_pat <- plogis(
+    orient_draws(
+      eta_1se_pat, nrow(xpatient)
+    )
+  )
+  
+  eta_best_pat <- proj_linpred(
+    object = proj_best,
+    newdata = xpatient,
+    integrated = FALSE,
+    transform = FALSE
+  )$pred
+  
+  p_best_pat <- plogis(
+    orient_draws(
+      eta_best_pat, nrow(xpatient)
+    )
+  )
+  
+  # ==========================================================
+  # PART 1: VALIDATION METRICS AND VARIABLE SELECTION
+  # ==========================================================
+  ref_row <- c(ndev, "hs-ref", measures(yval, p_ref_val, p_true), rep(1, n.para))
+  
+  suggest_row <- c(ndev, "hs-1se", measures(yval, p_1se_val, p_true), get_selected(vs, size_suggested))
+  
+  best_row <- c(ndev, "hs-best", measures(yval, p_best_val, p_true), get_selected(vs, size_best))
+  
+  summary_result <- rbind(
+    ref_row,
+    suggest_row,
+    best_row
+  )
+  
+  measure_names <- c(
+    "calibration_slope",
+    "calibration_in_the_large",
+    "auc",
+    "brier_score",
+    "mape"
+  )
+  
+  colnames(summary_result) <- c(
+    "ndev", "method", measure_names, paste0("varsel", seq_len(n.para))
+  )
+  
+  summary_result <- as.data.frame(
+    summary_result,
+    check.names = FALSE
+  )
+  
+  # ==========================================================
+  # PART 2: FIXED-PATIENT POSTERIOR MEAN AND MODE
+  # ==========================================================
+  
+  make_patient_rows <- function(method, p_draws) {
+    
+    tibble(
+      scenario = scenario_id,
+      simulation = i,
+      ndev = ndev,
+      method = method,
+      patient = patient_names,
+      true_probability = true_probability,
+      mean_probability = colMeans(p_draws),
+      mode_probability = apply(
+        p_draws, 2, probability_mode
+      )
+    )
+  }
+  
+  patient_predictions <- bind_rows(
+    make_patient_rows("hs-ref", p_ref_pat),
+    make_patient_rows("hs-1se", p_1se_pat),
+    make_patient_rows("hs-best", p_best_pat)
+  )
+  
+  # ==========================================================
+  # PART 3: FULL POSTERIOR DISTRIBUTIONS
+  # Simulation 1, ndev = 1505 only
+  # ==========================================================
+  
+  posterior_distributions <- NULL
+  
+  if (save_posterior) {
+    
+    colnames(p_ref_pat) <- patient_names
+    colnames(p_1se_pat) <- patient_names
+    colnames(p_best_pat) <- patient_names
+    
+    posterior_distributions <- list(
+      scenario = scenario_id,
+      simulation = i,
+      ndev = ndev,
+      patient_names = patient_names,
+      true_probability = setNames(
+        true_probability, patient_names
+      ),
+      probability_draws = list(
+        hs_ref = p_ref_pat,
+        hs_1se = p_1se_pat,
+        hs_best = p_best_pat
+      )
+    )
+  }
+  
+  list(
+    summary = summary_result,
+    patient_predictions = patient_predictions,
+    posterior_distributions = posterior_distributions
+  )
+}
