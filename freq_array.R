@@ -44,25 +44,6 @@ source('run_freq.R')
 
 
 # ------------------------------------------------------------
-# 1. Load parameters and simulation functions
-# ------------------------------------------------------------
-
-source("1_parameters.R")
-source("3_measures.R")
-source("prune_lasso_predictor.R")
-source("run_freq_combined.R")
-
-# Also ensure these existing functions are loaded:
-#   simulation_file()
-#   unilogit()
-#   backward_pvalue()
-#   mod_penal_ave_foreach()
-#
-# Source their defining scripts here if they are not already
-# loaded by one of the files above.
-
-
-# ------------------------------------------------------------
 # 2. Read Myriad SGE array variables
 # ------------------------------------------------------------
 
