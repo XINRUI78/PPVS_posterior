@@ -104,10 +104,9 @@ out <- run_hs(
   data_dir = "simulation_data"
 )
 
-
 # ------------------------------------------------------------
 # 9. Define result directories
-# ------------------------------------------------------------
+# ============================================================
 
 result_dir <- file.path(
   "results",
@@ -115,76 +114,77 @@ result_dir <- file.path(
   paste0("ndev_", ndev_current)
 )
 
-temp_dir <- file.path(
-  result_dir,
-  "_replications"
-)
+task1_dir <- file.path(result_dir, "measures")
+task2_dir <- file.path(result_dir, "fixed patients")
+task3_dir <- file.path(result_dir, "posterior")
 
-dir.create(
-  temp_dir,
-  recursive = TRUE,
-  showWarnings = FALSE
-)
+dir.create(task1_dir, recursive = TRUE, showWarnings = FALSE)
+dir.create(task2_dir, recursive = TRUE, showWarnings = FALSE)
+dir.create(task3_dir, recursive = TRUE, showWarnings = FALSE)
 
 
-# ------------------------------------------------------------
+# ============================================================
 # 10. Save Task 1: Validation performance
-# ------------------------------------------------------------
+# ============================================================
 
-measures_file <- file.path(
-  temp_dir,
-  sprintf(
-    "m_rep_%03d.rds",
-    sim_id
-  )
+measures_rds <- file.path(
+  task1_dir,
+  sprintf("m_rep_%03d.rds", sim_id)
+)
+
+measures_csv <- file.path(
+  task1_dir,
+  sprintf("m_rep_%03d.csv", sim_id)
 )
 
 saveRDS(
   out$summary,
-  measures_file
+  measures_rds
 )
 
 write.csv(
   out$summary,
-  file = measures_file,
+  file = measures_csv,
   row.names = FALSE
 )
 
 
-# ------------------------------------------------------------
+# ============================================================
 # 11. Save Task 2: Fixed-patient posterior mean and mode
-# ------------------------------------------------------------
+# ============================================================
 
-fixed_file <- file.path(
-  temp_dir,
-  sprintf(
-    "fix_rep_%03d.rds",
-    sim_id
-  )
+fixed_rds <- file.path(
+  task2_dir,
+  sprintf("fix_rep_%03d.rds", sim_id)
+)
+
+fixed_csv <- file.path(
+  task2_dir,
+  sprintf("fix_rep_%03d.csv", sim_id)
 )
 
 saveRDS(
   out$patient_predictions,
-  fixed_file
+  fixed_rds
 )
 
 write.csv(
   out$patient_predictions,
-  file = fixed_file,
+  file = fixed_csv,
   row.names = FALSE
 )
 
-# ------------------------------------------------------------
+
+# ============================================================
 # 12. Save Task 3: Posterior distributions
-#
-# Only replication 1 at ndev = 1505.
-# ------------------------------------------------------------
+# Only replication 1 at ndev = 1505
+# ============================================================
 
 if (!is.null(out$posterior_distributions)) {
 
   pd_file <- file.path(
-    temp_dir,
-    "pd_rep_001.rds"
+    task3_dir,
+    sprintf("pd_rep_%03d.rds", sim_id)
   )
 
   saveRDS(
