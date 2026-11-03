@@ -1,6 +1,9 @@
 source('1_parameters.R')
 source('3_measures.R')
-source('freq_methods.R')
+source('prune_lasso_predictor.R')
+source('unilogit.R')
+source('backward_pvalue.R')
+source('mod_penal_ave_foreach.R')
 source('run_freq.R')
 
 
