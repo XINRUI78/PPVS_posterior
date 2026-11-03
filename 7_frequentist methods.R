@@ -1,27 +1,27 @@
 backward_pvalue <- function(data, response, p_threshold = 0.05) {
   
-  # Start with the full model for backward elimination
-  current_formula <- as.formula(paste(response, "~ ."))
-  model <- glm(current_formula, data = data, family = binomial)
-  predictors <- setdiff(names(data), response)
+    # Start with the full model for backward elimination
+    current_formula <- as.formula(paste(response, "~ ."))
+    model <- glm(current_formula, data = data, family = binomial)
+    predictors <- setdiff(names(data), response)
   
   # Main loop for stepwise selection
   while (TRUE) {
     removed <- FALSE
     
     # Backward Step: Remove predictors with p-value > threshold
-    p_values <- summary(model)$coefficients[-1, 4]  # Exclude intercept
-    names(p_values) <- rownames(summary(model)$coefficients)[-1]  # Get predictor names
-    max_pval <- max(p_values, na.rm = TRUE)
-    
-    # If there is a predictor to remove with p-value > threshold
-    if (max_pval > p_threshold) {
-      worst_predictor <- names(which.max(p_values))
-      current_formula <- as.formula(paste(response, "~", paste(setdiff(predictors, worst_predictor), collapse = " + ")))
-      model <- glm(current_formula, data = data, family = binomial)
-      predictors <- setdiff(predictors, worst_predictor)
-      removed <- TRUE
-    }
+      p_values <- summary(model)$coefficients[-1, 4]  # Exclude intercept
+      names(p_values) <- rownames(summary(model)$coefficients)[-1]  # Get predictor names
+      max_pval <- max(p_values, na.rm = TRUE)
+      
+      # If there is a predictor to remove with p-value > threshold
+      if (max_pval > p_threshold) {
+        worst_predictor <- names(which.max(p_values))
+        current_formula <- as.formula(paste(response, "~", paste(setdiff(predictors, worst_predictor), collapse = " + ")))
+        model <- glm(current_formula, data = data, family = binomial)
+        predictors <- setdiff(predictors, worst_predictor)
+        removed <- TRUE
+      }
     
     
     # Stop if no further changes can be made
@@ -29,65 +29,17 @@ backward_pvalue <- function(data, response, p_threshold = 0.05) {
       break
     }
   }
-  
-  return(model)
-}
-backward_lrt <- function(data, response, p_threshold = 0.05) {
-  predictors <- setdiff(names(data), response)
-  current_formula <- as.formula(paste(response, "~", paste(predictors, collapse = " + ")))
-  current_model <- glm(current_formula, data = data, family = binomial)
-  
-  while (length(predictors) > 1) {
-    p_values <- sapply(predictors, function(var) {
-      reduced_predictors <- setdiff(predictors, var)
-      reduced_formula <- as.formula(paste(response, "~", paste(reduced_predictors, collapse = " + ")))
-      reduced_model <- glm(reduced_formula, data = data, family = binomial)
-      
-      # Likelihood Ratio Test
-      lrt <- anova(reduced_model, current_model, test = "LRT")
-      pval <- lrt[2, "Pr(>Chi)"]
-      return(pval)
-    })
-    
-    max_p <- max(p_values, na.rm = TRUE)
-    if (max_p > p_threshold) {
-      worst_var <- names(which.max(p_values))
-      predictors <- setdiff(predictors, worst_var)
-      current_formula <- as.formula(paste(response, "~", paste(predictors, collapse = " + ")))
-      current_model <- glm(current_formula, data = data, family = binomial)
-    } else {
-      break
-    }
-  }
-  
-  return(current_model)
-}
-# Main function
-back_logit <- function(data, response, crit, p_threshold = 0.05) {
-  data[[response]] <- as.factor(data[[response]])
-  
-  full_model <- glm(as.formula(paste(response, "~ .")), data = data, family = binomial)
-  
-  if (crit == "AIC" || crit == "BIC") {
-    final_model <- step(full_model, direction = "backward", k = ifelse(crit == "AIC", 2, log(nrow(data))))
-    
-  } else if (crit == "p_value") {
-    final_model <- backward_pvalue(data, response, p_threshold)
-    
-  } else if (crit == "LRT") {
-    final_model <- backward_lrt(data, response, p_threshold)
-    
-  } else {
-    stop("Invalid criterion. Use 'AIC', 'BIC', 'p_value', or 'LRT'.")
-  }
-  
-  back_predictors <- names(coef(final_model))[-1]  # Exclude intercept
+  # Get the final predictors
   all_predictors <- setdiff(names(data), response)
+  back_predictors <- names(coef(model))[-1] # Exclude the intercept
+  
+  # Create the indicator row for variable retention
   indicator <- ifelse(all_predictors %in% back_predictors, 1, 0)
   
+  # Return the final model and indicator row
   return(list(
     varsel_back = indicator,
-    backmodel = final_model
+    backmodel = model
   ))
 }
 
@@ -244,4 +196,44 @@ mod_penal_ave_foreach <- function(x, y, bn=20, method="ridge", nfolds=10, f = nf
   beta.boot   <- as.vector(coef(fit, s = lambda.boot))
   
   return(list("beta.boot" = beta.boot, "lambda.boot" = lambda.boot))
+}
+
+prune_lasso_predictor <- function(x, eta_lasso, r2_threshold = 0.99) {
+  x <- as.data.frame(x)
+  eta_lasso <- as.numeric(eta_lasso)
+  predictors <- names(x)
+  dat <- data.frame(eta_lasso = eta_lasso, x, check.names = FALSE)
+  fit <- function(terms) {
+    fm <- if (length(terms)) reformulate(terms, response = "eta_lasso")
+          else eta_lasso ~ 1
+    lm(fm, data = dat)
+  }
+  # For a constant target, the intercept-only model reproduces it exactly.
+  if (stats::var(eta_lasso) < 1e-20) {
+    result <- fit(character(0))
+    return(list(coefficients = coef(result),
+                kept = setNames(integer(length(predictors)), predictors),
+                r2 = 1))
+  }
+  remaining <- predictors
+  while (length(remaining) > 0L) {
+    candidates <- lapply(remaining, function(drop) {
+      subset <- setdiff(remaining, drop)
+      mod <- fit(subset)
+      r2 <- summary(mod)$r.squared
+      if (length(subset) == 0L) r2 <- 0
+      if (!is.finite(r2)) r2 <- -Inf
+      list(drop = drop, r2 = r2)
+    })
+    scores <- vapply(candidates, `[[`, numeric(1), "r2")
+    j <- which.max(scores)
+    if (!length(j) || scores[j] < r2_threshold) break
+    remaining <- setdiff(remaining, candidates[[j]]$drop)
+  }
+  final <- fit(remaining)
+  b <- coef(final)
+  if (anyNA(b)) stop("Aliased coefficients in pruned model; check collinearity")
+  kept <- setNames(as.integer(predictors %in% remaining), predictors)
+  list(coefficients = b, kept = kept,
+       r2 = if (length(remaining)) summary(final)$r.squared else 0)
 }
