@@ -271,7 +271,6 @@ run_freq <- function(
   # Ensure numerical patient columns
   patient_predictions$simulation <- as.integer(patient_predictions$simulation)
   patient_predictions$patient_id <- as.integer(patient_predictions$patient_id)
-  patient_predictions$observed_y <- as.numeric(patient_predictions$observed_y)
   patient_predictions$p_true <- as.numeric(patient_predictions$p_true)
   patient_predictions$p_estimated <- as.numeric(patient_predictions$p_estimated)
 
