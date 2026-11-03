@@ -1,10 +1,9 @@
-
 # ============================================================
 # run_freq.R
 # Nine frequentist methods
 # One replication per call
 # ============================================================
-
+source("freq_methods.R")
 library(glmnet)
 
 run_freq <- function(
