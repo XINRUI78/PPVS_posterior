@@ -31,6 +31,7 @@
 # ------------------------------------------------------------
 
 source("1_parameters.R")
+source("3_measures.R")
 source("run_hs_combined.R")
 
 
