@@ -88,6 +88,18 @@ fixed_patients <- readRDS(
 # ------------------------------------------------------------
 # 5. Check required simulation dataset exists
 # ------------------------------------------------------------
+simulation_file <- function(
+    scenario_id, ndev, i,
+    data_dir = "simulation_data"
+) {
+  file.path(
+    data_dir,
+    sprintf(
+      "s%02d_ndev_%d_rep_%03d.rds",
+      scenario_id, ndev, i
+    )
+  )
+}
 
 data_file <- simulation_file(
   scenario_id = scenario_id,
