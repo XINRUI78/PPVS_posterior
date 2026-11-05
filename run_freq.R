@@ -108,11 +108,8 @@ run_freq <- function(
   uni_eta_05 <- as.matrix(cbind(1, xval[, varsel_uni_05 == 1])) %*% coef(unimodel_05)
   uni_p_05 <- as.vector(1 / (1 + exp(-uni_eta_05)))
   method_result[2,] <- c(prev, auc, ndev, "UVS-5%", measures(yval, uni_p_05, p_true_val), varsel_uni_05, p_threshold)
-
-  p_patient_uni5 <- as.numeric(
-        predict(unimodel_05, newdata = fixed_x, type = "response")
-      )
-
+  eta_patient_uni5 <- as.matrix(cbind(1, fixed_x[, varsel_uni_05 == 1])) %*% coef(unimodel_05)
+  p_patient_uni5 <- as.vector(1 / (1 + exp(-eta_patient_uni5)))
       patient_result$p_estimated[
         patient_result$method == "UVS-5%"
       ] <- p_patient_uni5
@@ -124,10 +121,8 @@ run_freq <- function(
   uni_eta_15 <- as.matrix(cbind(1, xval[, varsel_uni_15 == 1])) %*% coef(unimodel_15)
   uni_p_15 <- as.vector(1 / (1 + exp(-uni_eta_15)))
   method_result[3, ] <- c(prev, auc, ndev, "UVS-15%", measures(yval, uni_p_15, p_true_val), varsel_uni_15, p_threshold)
-
-  p_patient_uni15 <- as.numeric(
-        predict(unimodel_15, newdata = fixed_x, type = "response")
-      )
+  eta_patient_uni15 <- as.matrix(cbind(1, fixed_x[, varsel_uni_15 == 1])) %*% coef(unimodel_15)
+  p_patient_uni15 <- as.vector(1 / (1 + exp(-eta_patient_uni15)))
 
       patient_result$p_estimated[
         patient_result$method == "UVS-15%"
