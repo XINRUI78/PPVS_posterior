@@ -1,55 +1,127 @@
 library(glmnet)
 library(rms)
+
+# ============================================================
+# Harrell step-down approximation
+# ============================================================
+
 prune_predictor_harrell <- function(x, eta_full, r2_threshold = 0.99) {
+
   x <- as.data.frame(x)
   eta_full <- as.numeric(eta_full)
   predictors <- names(x)
-  
-  dat <- data.frame(eta_full = eta_full, x, check.names = FALSE)
-  fm <- reformulate(predictors, response = "eta_full")
+  p <- ncol(x)
+
+  if (length(eta_full) != nrow(x)) stop("x and eta_full have different lengths")
+  if (any(!is.finite(eta_full)) || any(!is.finite(as.matrix(x))))
+    stop("Missing or non-finite values are not supported")
+  if (!all(vapply(x, is.numeric, logical(1)))) stop("Predictors must be numeric")
+  if (anyDuplicated(predictors)) stop("Predictor names must be unique")
+  if (any(predictors != make.names(predictors))) stop("Invalid predictor names")
+  if (!is.finite(r2_threshold) || r2_threshold < 0 || r2_threshold > 1)
+    stop("Invalid R-squared threshold")
+
+  empty_b <- c("(Intercept)" = mean(eta_full), setNames(rep(0, p), predictors))
+  empty_kept <- setNames(integer(p), predictors)
+
+  # Constant reference linear predictor
+  if (var(eta_full) < 1e-20) {
+    return(list(coefficients = empty_b, kept = empty_kept,
+                selected = character(0), n_selected = 0L, r2 = 1,
+                path = data.frame(step = 0L, n_selected = 0L, r2 = 1),
+                fastbw = NULL))
+  }
+
+  # Identify linearly independent predictors
+  X_full <- model.matrix(~ ., data = x)
+  qr_X <- qr(X_full, tol = 1e-10)
+
+  independent <- sort(qr_X$pivot[seq_len(qr_X$rank)])
+  independent <- setdiff(independent, match("(Intercept)", colnames(X_full)))
+  active_names <- colnames(X_full)[independent]
+
+  if (!length(active_names)) {
+    stop("No estimable predictors in auxiliary OLS model")
+  }
+
+  # Fit auxiliary OLS using estimable predictors
+  dat <- data.frame(eta_full = eta_full, x[, active_names, drop = FALSE])
+  fm <- reformulate(active_names, response = "eta_full")
+
   a <- rms::ols(fm, data = dat, sigma = 1, x = TRUE, y = TRUE)
   s <- rms::fastbw(a, aics = 10000)
-  
+
+  # Extract auxiliary OLS coefficients
   X <- model.matrix(fm, data = dat)
   cn <- colnames(X)
-  full_b <- coef(a)[cn]
-  if (anyNA(full_b)) stop("Auxiliary OLS model has aliased coefficients")
-  
-  # Harrell's fastbw coefficient history represents successive approximations.
+  full_betas <- coef(a)[cn]
+
+  if (anyNA(full_betas)) stop("Auxiliary OLS still has aliased coefficients")
+
+  # Extract fastbw coefficient history
   B <- as.matrix(s$Coefficients)
+
   if (!is.null(rownames(B)) && all(cn %in% rownames(B)) &&
       (is.null(colnames(B)) || !all(cn %in% colnames(B)))) B <- t(B)
-  if (is.null(colnames(B)) || !all(cn %in% colnames(B)))
-    stop("Cannot align fastbw coefficient history; inspect str(s$Coefficients)")
+
+  if (is.null(colnames(B)) || !all(cn %in% colnames(B))) {
+    stop("Cannot align fastbw coefficients; inspect str(s$Coefficients)")
+  }
+
   B <- B[, cn, drop = FALSE]
   if (anyNA(B) || any(!is.finite(B))) stop("Invalid fastbw coefficient history")
-  B <- rbind(full = full_b, B)
-  
+
+  # Include full auxiliary model
+  B <- rbind(full_model = full_betas, B)
+
+  # Approximate linear predictors
   eta_path <- X %*% t(B)
+
+  # R-squared for each step
   r2 <- vapply(seq_len(ncol(eta_path)), function(j) {
     z <- eta_path[, j]
     if (sd(z) < 1e-12) return(0)
     cor(z, eta_full)^2
   }, numeric(1))
-  
-  n_selected <- rowSums(abs(B[, predictors, drop = FALSE]) > 1e-12)
+
+  n_selected <- rowSums(abs(B[, active_names, drop = FALSE]) > 1e-12)
+  path <- data.frame(step = seq_along(r2) - 1L, n_selected = n_selected, r2 = r2)
+
+  # Select the smallest model with R-squared >= threshold
   eligible <- which(r2 >= r2_threshold)
-  if (!length(eligible)) stop("No step-down model meets the R-squared threshold")
+  if (!length(eligible)) stop("No model satisfies the R-squared threshold")
+
   best <- eligible[which.min(n_selected[eligible])]
   b <- B[best, ]
-  kept <- setNames(as.integer(abs(b[predictors]) > 1e-12), predictors)
-  
-  list(coefficients = b, kept = kept, r2 = unname(r2[best]),
-       n_selected = sum(kept), path = data.frame(n_selected = n_selected, r2 = r2))
+
+  # Restore coefficients for all original predictors
+  b_complete <- empty_b
+  b_complete[names(b)] <- b
+
+  kept <- setNames(as.integer(abs(b_complete[predictors]) > 1e-12), predictors)
+
+  list(coefficients = b_complete, kept = kept,
+       selected = names(kept)[kept == 1L], n_selected = sum(kept),
+       r2 = unname(r2[best]), path = path, fastbw = s)
 }
 
-predict_harrell_stepdown <- function(result, newx) {
-  newx <- as.data.frame(newx)
+
+# ============================================================
+# Validation and fixed-patient predictions
+# ============================================================
+
+predict_harrell_stepdown <- function(result, xval) {
+
+  xval <- as.data.frame(xval)
   b <- result$coefficients
   predictors <- setdiff(names(b), "(Intercept)")
-  if (!all(predictors %in% names(newx))) stop("Prediction columns do not match")
-  X <- cbind("(Intercept)" = 1, as.matrix(newx[, predictors, drop = FALSE]))
-  plogis(as.vector(X[, names(b), drop = FALSE] %*% b))
+
+  if (!all(predictors %in% names(xval))) stop("Validation predictors do not match")
+
+  Xval <- cbind("(Intercept)" = 1, as.matrix(xval[, predictors, drop = FALSE]))
+  eta <- as.vector(Xval[, names(b), drop = FALSE] %*% b)
+
+  plogis(eta)
 }
 # ============================================================
 # Run one simulation replication
