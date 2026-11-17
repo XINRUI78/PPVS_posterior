@@ -20,7 +20,7 @@ perform_gusto <- function(order, data, n.para, n.restrict = NULL,
   # Initialise storage
   ##########################################################
   
-  n_methods <- if (is.null(n.restrict)) 14 else 17
+  n_methods <- if (is.null(n.restrict)) 19 else 22
   
   # ndev + method + 4 performance measures
   # + n.para variable-selection indicators + option
@@ -35,6 +35,7 @@ perform_gusto <- function(order, data, n.para, n.restrict = NULL,
   ##########################################################
   
   fit <- glm(y ~ ., data = data.dev, family = "binomial")
+  fit_full <- fit
   xval <- model.matrix(fit, data = data.val)[,-1]
   eta_val <- as.matrix(cbind(1, xval)) %*% coef(fit)
   p_val <- as.vector(1 / (1 + exp(-eta_val)))
@@ -486,6 +487,47 @@ perform_gusto <- function(order, data, n.para, n.restrict = NULL,
   }
   
   
+  # Ridge logistic regression
+  ridge <- glmnet::cv.glmnet(as.matrix(x), y, alpha = 0,
+                            family = "binomial", type.measure = "deviance")
+  ridge_p <- as.vector(predict(ridge, as.matrix(xval), s = "lambda.min",
+                               type = "response"))
+  method_result[18, ] <- c(ndev, 17, measures(yval, ridge_p),
+                           rep(1, n.para), ridge$lambda.min)
+  nb_list[["Ridge"]] <- calc_net_benefit(yval, ridge_p, thresholds, "Ridge")
+
+  # Adaptive LASSO with Ridge-initialised penalty weights
+  ridge_beta <- as.numeric(coef(ridge, s = "lambda.min"))[-1]
+  penalty_weights <- 1 / pmax(abs(ridge_beta), 1e-6)
+  penalty_weights <- penalty_weights / mean(penalty_weights)
+  alasso <- glmnet::cv.glmnet(as.matrix(x), y, alpha = 1,
+                             penalty.factor = penalty_weights,
+                             family = "binomial", type.measure = "deviance")
+  alasso_p <- as.vector(predict(alasso, as.matrix(xval), s = "lambda.min",
+                                type = "response"))
+  varsel_alasso <- as.integer(as.numeric(coef(alasso, s = "lambda.min"))[-1] != 0)
+  method_result[19, ] <- c(ndev, 18, measures(yval, alasso_p),
+                           varsel_alasso, alasso$lambda.min)
+  nb_list[["ALASSO"]] <- calc_net_benefit(yval, alasso_p, thresholds, "ALASSO")
+
+  # Harrell step-down approximation: coefficients applied without refitting
+  sd_sources <- list(
+    SD_MLE = as.vector(predict(fit_full, newdata = data.dev, type = "link")),
+    SD_LS_min = as.vector(predict(lasso, as.matrix(x), s = "lambda.min",
+                                  type = "link")),
+    SD_LS_mod = as.vector(cbind(1, as.matrix(x)) %*% mod_lasso$beta.boot)
+  )
+  for (j in seq_along(sd_sources)) {
+    nm <- names(sd_sources)[j]
+    sd_fit <- prune_predictor_harrell(x, sd_sources[[j]], r2_threshold = 0.99)
+    b <- sd_fit$coefficients
+    sd_Xval <- cbind(Intercept = 1, as.matrix(xval[, names(b)[-1], drop = FALSE]))
+    sd_p <- plogis(as.vector(sd_Xval %*% b))
+    method_result[19 + j, ] <- c(ndev, 18 + j, measures(yval, sd_p),
+                                 sd_fit$kept, 0.99)
+    nb_list[[nm]] <- calc_net_benefit(yval, sd_p, thresholds, nm)
+  }
+
   ##########################################################
   # Treat-all and treat-none
   ##########################################################
@@ -539,3 +581,4 @@ perform_gusto <- function(order, data, n.para, n.restrict = NULL,
     net_benefit = net_benefit_long
   ))
 }
+  
