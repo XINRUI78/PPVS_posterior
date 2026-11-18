@@ -3,15 +3,33 @@ library(foreach)
 
 perform_gusto <- function(order, data, n.para, n.restrict = NULL,
                           thresholds = seq(0.01, 0.50, by = 0.01)) {
+  data <- as.data.frame(data)
   ndev <- length(order)
-  data.dev <- data[order, , drop = FALSE]
-  data.val <- data[-order, , drop = FALSE]
-  x <- data.dev[, -1, drop = FALSE]
-  y <- data.dev[, 1]
-  xval <- data.val[, -1, drop = FALSE]
-  yval <- data.val[, 1]
-  predictors <- names(x)
-  if (length(predictors) != n.para) stop("n.para does not match predictors")
+  predictor_names <- names(data)[-1]
+
+  # Encode categorical predictors consistently across development and validation.
+  for (v in predictor_names) {
+    if (is.character(data[[v]]) || is.factor(data[[v]]))
+      data[[v]] <- factor(data[[v]])
+  }
+  design <- model.matrix(reformulate(predictor_names), data = data)
+  design <- design[, -1, drop = FALSE]
+
+  xm <- design[order, , drop = FALSE]
+  xvm <- design[-order, , drop = FALSE]
+  x <- as.data.frame(xm, check.names = FALSE)
+  xval <- as.data.frame(xvm, check.names = FALSE)
+  predictors <- colnames(xm)
+  n.para <- ncol(xm)  # Count dummy columns, not original variables.
+  y_all <- data[[1]]
+  if (is.factor(y_all)) y_all <- as.character(y_all)
+  y_all <- as.numeric(y_all)
+  if (anyNA(y_all) || !all(y_all %in% c(0, 1)))
+    stop("Outcome must be coded 0/1")
+  y <- y_all[order]
+  yval <- y_all[-order]
+  data.dev <- data.frame(y = y, x, check.names = FALSE)
+  data.val <- data.frame(y = yval, xval, check.names = FALSE)
 
   method_result <- matrix(NA_real_, nrow = 13, ncol = 7 + n.para)
   nb_list <- list()
@@ -19,13 +37,17 @@ perform_gusto <- function(order, data, n.para, n.restrict = NULL,
     method_result[row, ] <<- c(ndev, row, measures(yval, p), varsel, option)
     nb_list[[name]] <<- calc_net_benefit(yval, p, thresholds, name)
   }
-  predict_glm <- function(model) as.vector(predict(model, newdata = data.val,
-                                                   type = "response"))
+  predict_glm <- function(model) {
+    b <- coef(model)
+    if (anyNA(b)) stop("Aliased coefficients in selected GLM")
+    mm <- model.matrix(delete.response(terms(model)), data = data.val)
+    plogis(as.vector(mm[, names(b), drop = FALSE] %*% b))
+  }
 
-  fit_full <- glm(reformulate(predictors, response = names(data.dev)[1]),
-                  data = data.dev, family = binomial())
-  eta_mle <- as.vector(cbind(1, as.matrix(x)) %*% coef(fit_full))
-  p_val <- plogis(as.vector(cbind(1, as.matrix(xval)) %*% coef(fit_full)))
+  fit_full <- glm(y ~ ., data = data.dev, family = binomial())
+  if (anyNA(coef(fit_full))) stop("Aliased coefficients in full MLE")
+  eta_mle <- as.vector(cbind(1, xm) %*% coef(fit_full))
+  p_val <- plogis(as.vector(cbind(1, xvm) %*% coef(fit_full)))
   store(1, p_val, rep(1, n.para), name = "MLE")
 
   back_05 <- backward_pvalue(data.dev, "y", 0.05)
@@ -44,8 +66,6 @@ perform_gusto <- function(order, data, n.para, n.restrict = NULL,
   uni_p_15 <- predict_glm(unisum_15$uni)
   store(5, uni_p_15, unisum_15$varsel_uni, 0.15, "UVS_15")
 
-  xm <- as.matrix(x)
-  xvm <- as.matrix(xval)
   lasso <- glmnet::cv.glmnet(xm, y, alpha = 1, family = "binomial",
                             type.measure = "deviance")
   lambda_min <- lasso$lambda.min
@@ -97,7 +117,8 @@ perform_gusto <- function(order, data, n.para, n.restrict = NULL,
     if (!all(needed %in% colnames(xvm))) stop("Step-down predictors do not match")
     sd_Xval <- cbind("(Intercept)" = 1, xvm[, needed, drop = FALSE])
     sd_p <- plogis(as.vector(sd_Xval[, names(b), drop = FALSE] %*% b))
-    store(10 + j, sd_p, sd_fit$kept, 0.99, nm)
+    kept <- as.integer(predictors %in% names(b)[-1][abs(b[-1]) > 1e-12])
+    store(10 + j, sd_p, kept, 0.99, nm)
   }
 
   prevalence_val <- mean(yval)
