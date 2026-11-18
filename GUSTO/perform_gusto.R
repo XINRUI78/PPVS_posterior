@@ -6,6 +6,8 @@ perform_gusto <- function(order, data, n.para, n.restrict = NULL,
   data <- as.data.frame(data)
   ndev <- length(order)
   predictor_names <- names(data)[-1]
+  if (anyDuplicated(predictor_names)) stop("Predictor names must be unique")
+  if (anyNA(data)) stop("Missing values must be handled before fitting")
 
   # Encode categorical predictors consistently across development and validation.
   for (v in predictor_names) {
@@ -14,6 +16,8 @@ perform_gusto <- function(order, data, n.para, n.restrict = NULL,
   }
   design <- model.matrix(reformulate(predictor_names), data = data)
   design <- design[, -1, drop = FALSE]
+  if (!ncol(design)) stop("No predictors after encoding")
+  if (any(!is.finite(design))) stop("Non-finite predictor values")
 
   xm <- design[order, , drop = FALSE]
   xvm <- design[-order, , drop = FALSE]
@@ -34,13 +38,17 @@ perform_gusto <- function(order, data, n.para, n.restrict = NULL,
   method_result <- matrix(NA_real_, nrow = 13, ncol = 7 + n.para)
   nb_list <- list()
   store <- function(row, p, varsel, option = NA_real_, name) {
+    if (length(p) != length(yval) || length(varsel) != n.para)
+      stop(sprintf("Invalid prediction/selection length for %s", name))
     method_result[row, ] <<- c(ndev, row, measures(yval, p), varsel, option)
     nb_list[[name]] <<- calc_net_benefit(yval, p, thresholds, name)
   }
   predict_glm <- function(model) {
     b <- coef(model)
     if (anyNA(b)) stop("Aliased coefficients in selected GLM")
-    mm <- model.matrix(delete.response(terms(model)), data = data.val)
+    mm <- model.matrix(delete.response(terms(model)), data = data.val,
+                       contrasts.arg = model$contrasts, xlev = model$xlevels)
+    if (!all(names(b) %in% colnames(mm))) stop("GLM coefficient names do not match validation data")
     plogis(as.vector(mm[, names(b), drop = FALSE] %*% b))
   }
 
