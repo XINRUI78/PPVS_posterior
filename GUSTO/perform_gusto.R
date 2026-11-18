@@ -22,8 +22,10 @@ perform_gusto <- function(order, data, n.para, n.restrict = NULL,
   predict_glm <- function(model) as.vector(predict(model, newdata = data.val,
                                                    type = "response"))
 
-  fit_full <- glm(y ~ ., data = data.dev, family = binomial())
-  p_val <- predict_glm(fit_full)
+  fit_full <- glm(reformulate(predictors, response = names(data.dev)[1]),
+                  data = data.dev, family = binomial())
+  eta_mle <- as.vector(cbind(1, as.matrix(x)) %*% coef(fit_full))
+  p_val <- plogis(as.vector(cbind(1, as.matrix(xval)) %*% coef(fit_full)))
   store(1, p_val, rep(1, n.para), name = "MLE")
 
   back_05 <- backward_pvalue(data.dev, "y", 0.05)
@@ -81,7 +83,7 @@ perform_gusto <- function(order, data, n.para, n.restrict = NULL,
   store(10, alasso_p, varsel_alasso, alasso$lambda.min, "ALASSO")
 
   sd_sources <- list(
-    SD_MLE = as.vector(predict(fit_full, newdata = data.dev, type = "link")),
+    SD_MLE = eta_mle,
     SD_LS_min = as.vector(predict(lasso, xm, s = "lambda.min", type = "link")),
     SD_LS_mod = eta_mod_lasso
   )
